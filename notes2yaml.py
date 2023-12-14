@@ -3,12 +3,17 @@
 import os
 import sys
 import numpy as np
+import openreview
 import yaml
 from argparse import ArgumentParser
 
 def parse_args():
     parser = ArgumentParser(description = 'Convert "Notes" into a draft YAML file (to be manually revised).')
     arg_group = parser.add_argument_group( 'Required arguments' )
+    arg_group.add_argument('-u', '--username', type = str, dest = 'username', \
+                           help = 'Username for OpenReview', required = True)
+    arg_group.add_argument('-p', '--password', type = str, dest = 'password', \
+                           help = 'Password for OpenReview', required = True)
     arg_group.add_argument('-n', '--notes', type = str, dest = 'notes', \
                            help = 'Notes in an NPZ file', default = 'EMNLP2023-Conference.npz')
     arg_group.add_argument('-v', '--volume', type = str, dest = 'volume', \
@@ -53,20 +58,24 @@ def escape_characters(string, charmap):
         string = string.replace(char, charmap[char])
     return string
 
-def parse_name(name):
-    # To flag names that need manual check
-    parts = name.split(' ')
-    namepart = {}
-    if len(parts) == 2:
-        namepart['first_name'] = parts[0]
-        namepart['last_name'] = parts[1]
-    elif len(parts) == 3:
-        namepart['first_name'] = parts[0]
-        namepart['middle_name'] = parts[1]
-        namepart['last_name'] = parts[2]
+def get_preferred_name(names, charmap):
+    # Not sure if there is always a preferred name
+    preferred_name = names[0]
+    if len(names) > 1:
+        for name in names:
+            if 'preferred' in name.keys() and name['preferred']:
+                preferred_name = name
+                break
+    parsed_name = {}
+    if 'first' in preferred_name.keys():
+        parsed_name['first_name'] = escape_characters(preferred_name['first'], charmap)
+        parsed_name['last_name'] = escape_characters(preferred_name['last'], charmap)
+        if preferred_name['middle'] and preferred_name['middle'] != '':
+            parsed_name['middle_name'] = escape_characters(preferred_name['middle'], charmap)
     else:
-        namepart['full_name'] = name
-    return namepart
+        parsed_name['full_name'] = escape_characters(preferred_name['fullname'], charmap)
+
+    return parsed_name
 
 def note2yaml(note, charmap):
     data = {}
@@ -77,7 +86,19 @@ def note2yaml(note, charmap):
     for field in ['title', 'abstract', 'venue']:
         data[field] = escape_characters(note.content[field]['value'], charmap)
     data['keywords'] = [escape_characters(kw, charmap) for kw in note.content['keywords']['value']]
-    data['authors'] = [parse_name(escape_characters(name, charmap)) for name in note.content['authors']['value']]
+    data['authors'] = []
+    for i in range (0, len(note.content['authorids']['value'])):
+        print (note.content['authorids']['value'][i])
+        try:
+            mp = client.get_profile(note.content['authorids']['value'][i])
+            names = mp.content['names']
+            print (names)
+            preferred_name = get_preferred_name(names, charmap)
+            data['authors'].append(preferred_name)
+        except:
+            name = escape_characters(note.content['authors']['value'][i], charmap)
+            data['authors'].append({'full_name' : name})
+            print (f"No Profile for {name}")
 
     data['attributes'] = {}
     if note.content['Submission_Type']['value'] == 'Regular Long Paper':
@@ -121,6 +142,7 @@ if __name__ == "__main__":
         print (f"Invalid volume is specified: {args.volume}", file = sys.stderr)
         sys.exit()
 
+    client = openreview.api.OpenReviewClient(baseurl='https://api2.openreview.net', username=args.username, password=args.password)
     notes = load_notes(args.notes)
     mapper = load_mapfile(args.mapfile)
     data = notes2yaml(notes, target_volumes, mapper)

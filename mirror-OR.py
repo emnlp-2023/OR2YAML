@@ -64,7 +64,7 @@ if __name__ == "__main__":
         print (f"mkdir {output_dir}", file = sys.stderr)
 
     for note in notes:
-        if args.latest != None and note.mdate <= old_notes[note.id].mdate:
+        if args.latest != None and note.id in old_notes.keys() and note.mdate <= old_notes[note.id].mdate:
             continue
         # Prepare PDF arguments
         if 'pdf' in note.content.keys() and len(note.content['pdf']['value']) > 0:
