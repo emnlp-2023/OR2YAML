@@ -23,4 +23,4 @@ ${CHANNEL}.npz:
 yml: ${CHANNEL}.${VOLUME}.yml
 
 ${CHANNEL}.${VOLUME}.yml: ${CHANNEL}.npz
-	python notes2yaml.py -n $< -m ${MAPFILE} -v ${VOLUME} -o $@
+	python notes2yaml.py -u ${USERNAME} -p ${PASSWORD} -n $< -m ${MAPFILE} -v ${VOLUME} -o $@
